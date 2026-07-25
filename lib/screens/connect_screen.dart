@@ -10,13 +10,25 @@ class ConnectScreen extends StatefulWidget {
   State<ConnectScreen> createState() => _ConnectScreenState();
 }
 
-class _ConnectScreenState extends State<ConnectScreen> {
+class _ConnectScreenState extends State<ConnectScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  int _selectedBaud = 115200;
+  bool _useKline = false;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<OBDService>().startScan();
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -26,100 +38,326 @@ class _ConnectScreenState extends State<ConnectScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('OBD CONNECT'),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: const Color(0xFF00E5FF),
+          labelColor: const Color(0xFF00E5FF),
+          unselectedLabelColor: Colors.grey,
+          tabs: const [
+            Tab(icon: Icon(Icons.bluetooth), text: 'BLUETOOTH'),
+            Tab(icon: Icon(Icons.usb), text: 'K-DCAN'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => obd.startScan(),
+            onPressed: () {
+              if (_tabController.index == 0) {
+                obd.startScan();
+              } else {
+                obd.scanKdcan();
+              }
+            },
           ),
         ],
       ),
       body: Column(
         children: [
+          // Status bar
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.black26,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Status: ${obd.status}', style: const TextStyle(color: Colors.cyanAccent)),
-                const SizedBox(height: 4),
-                Text(
-                  obd.isConnected
-                      ? 'Device: ${obd.device?.platformName ?? "Unknown"}'
-                      : 'Scan for ELM327 / OBDLink / Vgate',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: obd.isConnected ? Colors.greenAccent : Colors.redAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        obd.status,
+                        style: const TextStyle(
+                          color: Colors.cyanAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      obd.adapterType.name.toUpperCase(),
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 11,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
                 ),
+                if (obd.isConnected && obd.device != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Device: ${obd.device!.platformName}',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
+                  ),
               ],
             ),
           ),
+
+          // Tabs content
           Expanded(
-            child: StreamBuilder<List<ScanResult>>(
-              stream: FlutterBluePlus.scanResults,
-              builder: (context, snapshot) {
-                final results = snapshot.data ?? [];
-                final filtered = results.where((r) {
-                  final n = r.device.platformName.toLowerCase();
-                  return n.contains('obd') ||
-                      n.contains('elm') ||
-                      n.contains('vgate') ||
-                      n.contains('carista') ||
-                      n.contains('obdlink') ||
-                      n.isNotEmpty;
-                }).toList();
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // ── BLUETOOTH TAB ──
+                _buildBluetoothTab(obd),
 
-                if (filtered.isEmpty) {
-                  return const Center(
-                    child: Text('No adapters found yet...\nMake sure Bluetooth is on', textAlign: TextAlign.center),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (context, i) {
-                    final r = filtered[i];
-                    return ListTile(
-                      leading: const Icon(Icons.bluetooth, color: Colors.cyan),
-                      title: Text(r.device.platformName.isEmpty ? 'Unknown Device' : r.device.platformName),
-                      subtitle: Text(r.device.remoteId.str),
-                      trailing: ElevatedButton(
-                        onPressed: () => obd.connect(r.device),
-                        child: const Text('CONNECT'),
-                      ),
-                    );
-                  },
-                );
-              },
+                // ── K-DCAN TAB ──
+                _buildKdcanTab(obd),
+              ],
             ),
           ),
+
+          // Disconnect button
           if (obd.isConnected)
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: ElevatedButton.icon(
                 onPressed: () => obd.disconnect(),
                 icon: const Icon(Icons.link_off),
                 label: const Text('DISCONNECT'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red[900],
+                  foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 48),
                 ),
               ),
             ),
-          // Logs
+
+          // Live log console
           Container(
-            height: 160,
+            height: 150,
             color: Colors.black,
             child: ListView.builder(
               reverse: true,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               itemCount: obd.logs.length,
-              itemBuilder: (context, i) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                child: Text(
-                  obd.logs[i],
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.greenAccent),
+              itemBuilder: (context, i) => Text(
+                obd.logs[i],
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  color: Colors.greenAccent,
+                  height: 1.3,
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBluetoothTab(OBDService obd) {
+    return StreamBuilder<List<ScanResult>>(
+      stream: FlutterBluePlus.scanResults,
+      builder: (context, snapshot) {
+        final results = snapshot.data ?? [];
+        final filtered = results.where((r) {
+          final n = r.device.platformName.toLowerCase();
+          return n.contains('obd') ||
+              n.contains('elm') ||
+              n.contains('vgate') ||
+              n.contains('carista') ||
+              n.contains('obdlink') ||
+              n.isNotEmpty;
+        }).toList();
+
+        if (filtered.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.bluetooth_searching, size: 48, color: Colors.grey[700]),
+                const SizedBox(height: 12),
+                Text(
+                  'No Bluetooth adapters found',
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'ELM327 / OBDLink / Vgate / Carista',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => obd.startScan(),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('SCAN AGAIN'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: filtered.length,
+          itemBuilder: (context, i) {
+            final r = filtered[i];
+            return ListTile(
+              leading: const Icon(Icons.bluetooth, color: Colors.cyan),
+              title: Text(
+                r.device.platformName.isEmpty
+                    ? 'Unknown Device'
+                    : r.device.platformName,
+              ),
+              subtitle: Text(r.device.remoteId.str, style: const TextStyle(fontSize: 11)),
+              trailing: ElevatedButton(
+                onPressed: () => obd.connectBluetooth(r.device),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00E5FF).withOpacity(0.2),
+                  foregroundColor: const Color(0xFF00E5FF),
+                ),
+                child: const Text('CONNECT'),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildKdcanTab(OBDService obd) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Info card
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF121212),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.withOpacity(0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.usb, color: Colors.orange, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'K-DCAN USB Cable',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'FTDI FT232RL / CH340 / CP210x based cables\n'
+                  'Use OTG adapter on Android. Supports INPA / ISTA style access.',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Baud rate selector
+          const Text('BAUD RATE', style: TextStyle(color: Colors.grey, fontSize: 12, letterSpacing: 1)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [9600, 38400, 115200, 500000].map((baud) {
+              final selected = _selectedBaud == baud;
+              return ChoiceChip(
+                label: Text('$baud'),
+                selected: selected,
+                selectedColor: const Color(0xFF00E5FF).withOpacity(0.3),
+                labelStyle: TextStyle(
+                  color: selected ? const Color(0xFF00E5FF) : Colors.grey,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                ),
+                onSelected: (_) => setState(() => _selectedBaud = baud),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 16),
+
+          // K-Line toggle
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('K-Line Mode', style: TextStyle(fontSize: 14)),
+            subtitle: Text(
+              _useKline
+                  ? 'ISO 9141 / KWP2000 (older modules)'
+                  : 'D-CAN / high-speed (recommended)',
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            value: _useKline,
+            activeColor: const Color(0xFF00E5FF),
+            onChanged: (v) => setState(() => _useKline = v),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Action buttons
+          ElevatedButton.icon(
+            onPressed: () => obd.scanKdcan(),
+            icon: const Icon(Icons.search),
+            label: const Text('SCAN FOR K-DCAN'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey[900],
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: () => obd.connectKdcan(
+              baud: _selectedBaud,
+              useKline: _useKline,
+            ),
+            icon: const Icon(Icons.link),
+            label: Text('CONNECT  •  $_selectedBaud baud'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.withOpacity(0.25),
+              foregroundColor: Colors.orange,
+              minimumSize: const Size(double.infinity, 52),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Quick tips
+          Text(
+            'TIPS',
+            style: TextStyle(color: Colors.grey[600], fontSize: 11, letterSpacing: 1),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '• 9600 = classic K-Line (many E60 modules)\n'
+            '• 115200 = D-CAN / faster modern modules\n'
+            '• Use a quality FTDI-based cable for best results\n'
+            '• OTG adapter required on most phones',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12, height: 1.5),
           ),
         ],
       ),
