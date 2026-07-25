@@ -118,21 +118,41 @@ class _ConnectScreenState extends State<ConnectScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                // ── BLUETOOTH TAB ──
                 _buildBluetoothTab(obd),
-
-                // ── K-DCAN TAB ──
                 _buildKdcanTab(obd),
               ],
             ),
           ),
 
-          // Disconnect button
+          // Disconnect button with error handling
           if (obd.isConnected)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: ElevatedButton.icon(
-                onPressed: () => obd.disconnect(),
+                onPressed: () async {
+                  try {
+                    await obd.disconnect();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Disconnected successfully'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Disconnect error: $e'),
+                          backgroundColor: Colors.red[800],
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  }
+                },
                 icon: const Icon(Icons.link_off),
                 label: const Text('DISCONNECT'),
                 style: ElevatedButton.styleFrom(
@@ -242,7 +262,6 @@ class _ConnectScreenState extends State<ConnectScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Info card
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -276,10 +295,7 @@ class _ConnectScreenState extends State<ConnectScreen>
               ],
             ),
           ),
-
           const SizedBox(height: 20),
-
-          // Baud rate selector
           const Text('BAUD RATE', style: TextStyle(color: Colors.grey, fontSize: 12, letterSpacing: 1)),
           const SizedBox(height: 8),
           Wrap(
@@ -298,10 +314,7 @@ class _ConnectScreenState extends State<ConnectScreen>
               );
             }).toList(),
           ),
-
           const SizedBox(height: 16),
-
-          // K-Line toggle
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('K-Line Mode', style: TextStyle(fontSize: 14)),
@@ -315,10 +328,7 @@ class _ConnectScreenState extends State<ConnectScreen>
             activeColor: const Color(0xFF00E5FF),
             onChanged: (v) => setState(() => _useKline = v),
           ),
-
           const SizedBox(height: 20),
-
-          // Action buttons
           ElevatedButton.icon(
             onPressed: () => obd.scanKdcan(),
             icon: const Icon(Icons.search),
@@ -343,10 +353,7 @@ class _ConnectScreenState extends State<ConnectScreen>
               minimumSize: const Size(double.infinity, 52),
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // Quick tips
           Text(
             'TIPS',
             style: TextStyle(color: Colors.grey[600], fontSize: 11, letterSpacing: 1),
