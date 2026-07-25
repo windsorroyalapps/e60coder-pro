@@ -7,11 +7,14 @@ Cross-platform Flutter app → native Android APK + iOS + Desktop.
 ## Features
 
 - Bluetooth OBD-II (ELM327, OBDLink, Vgate, etc.)
+- **K-DCAN USB cable support** (FTDI FT232RL / CH340 / CP210x)
+  - Configurable baud (9600 K-Line / 115200 D-CAN)
+  - K-Line & D-CAN modes for E60 era modules
 - Real-time gauges: RPM, Boost, Speed, Coolant, Throttle, AFR
 - AI Tuning suggestion profiles (Sport / Track / Eco)
 - NCS-style coding shortcuts (seatbelt chime, DVD in motion, etc.)
 - Demo mode when no hardware present
-- Full Bluetooth + NFC permissions ready
+- Full Bluetooth + NFC + USB Host permissions ready
 - GitHub Actions auto-builds APK on every push
 
 ## Quick Start

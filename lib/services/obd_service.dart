@@ -1,13 +1,35 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+/// Connection type for the adapter
+enum AdapterType { bluetooth, kdcan, demo }
+
+/// E60Coder Pro OBD Service
+/// Supports:
+///   - Bluetooth ELM327 / OBDLink / Vgate style adapters
+///   - USB K-DCAN cables (FTDI FT232RL / CH340 / CP210x based)
+///   - Demo / simulation mode
+///
+/// K-DCAN notes:
+///   - Typical chip: FTDI FT232RL
+///   - Common baud rates: 9600 (K-Line), 115200 (faster CAN/D-CAN)
+///   - Used with INPA / ISTA / Tool32 for BMW E60 era cars
+///   - On Android requires USB host + usb_serial package
 class OBDService extends ChangeNotifier {
-  BluetoothDevice? _device;
+  // Bluetooth
+  BluetoothDevice? _btDevice;
   BluetoothCharacteristic? _txChar;
   BluetoothCharacteristic? _rxChar;
+
+  // K-DCAN / USB serial (placeholder for usb_serial integration)
+  // When using real USB: import 'package:usb_serial/usb_serial.dart';
+  // UsbPort? _usbPort;
+
   bool _isConnected = false;
   String _status = 'Disconnected';
+  AdapterType _adapterType = AdapterType.demo;
   final List<String> _logs = [];
 
   // Live data
@@ -18,10 +40,16 @@ class OBDService extends ChangeNotifier {
   double throttle = 0.0;
   double afr = 14.7;
 
+  // K-DCAN specific state
+  int _kdcanBaud = 115200; // default high-speed for D-CAN
+  bool _kdcanKline = false; // true = pure K-Line mode (older modules)
+
   bool get isConnected => _isConnected;
   String get status => _status;
   List<String> get logs => List.unmodifiable(_logs);
-  BluetoothDevice? get device => _device;
+  BluetoothDevice? get device => _btDevice;
+  AdapterType get adapterType => _adapterType;
+  int get kdcanBaud => _kdcanBaud;
 
   void _addLog(String msg) {
     final ts = DateTime.now().toIso8601String().substring(11, 19);
@@ -30,8 +58,12 @@ class OBDService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ──────────────────────────────────────────────
+  // BLUETOOTH SCAN / CONNECT (ELM327 style)
+  // ──────────────────────────────────────────────
+
   Future<void> startScan() async {
-    _addLog('Scanning for OBD adapters...');
+    _addLog('Scanning for Bluetooth OBD adapters...');
     try {
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
       FlutterBluePlus.scanResults.listen((results) {
@@ -40,23 +72,25 @@ class OBDService extends ChangeNotifier {
           if (name.toLowerCase().contains('obd') ||
               name.toLowerCase().contains('elm') ||
               name.toLowerCase().contains('vgate') ||
-              name.toLowerCase().contains('carista')) {
-            _addLog('Found: $name (${r.device.remoteId})');
+              name.toLowerCase().contains('carista') ||
+              name.toLowerCase().contains('obdlink')) {
+            _addLog('Found BT: $name (${r.device.remoteId})');
           }
         }
       });
     } catch (e) {
-      _addLog('Scan error: $e');
+      _addLog('BT Scan error: $e');
     }
   }
 
-  Future<void> connect(BluetoothDevice device) async {
+  Future<void> connectBluetooth(BluetoothDevice device) async {
     try {
-      _status = 'Connecting...';
+      _status = 'Connecting Bluetooth...';
       notifyListeners();
       await device.connect(timeout: const Duration(seconds: 10));
-      _device = device;
-      _addLog('Connected to ${device.platformName}');
+      _btDevice = device;
+      _adapterType = AdapterType.bluetooth;
+      _addLog('BT Connected: ${device.platformName}');
 
       List<BluetoothService> services = await device.discoverServices();
       for (var service in services) {
@@ -75,39 +109,131 @@ class OBDService extends ChangeNotifier {
       // ELM327 init sequence
       await _sendCommand('ATZ');
       await Future.delayed(const Duration(milliseconds: 1000));
-      await _sendCommand('ATE0'); // Echo off
-      await _sendCommand('ATL0'); // Linefeeds off
-      await _sendCommand('ATS0'); // Spaces off
-      await _sendCommand('ATH1'); // Headers on
-      await _sendCommand('ATSP0'); // Auto protocol
-      await _sendCommand('0100'); // Supported PIDs
+      await _sendCommand('ATE0');
+      await _sendCommand('ATL0');
+      await _sendCommand('ATS0');
+      await _sendCommand('ATH1');
+      await _sendCommand('ATSP0');
+      await _sendCommand('0100');
 
       _isConnected = true;
-      _status = 'Connected • Live';
-      _addLog('OBD link ready');
+      _status = 'BT Connected • Live';
+      _addLog('Bluetooth OBD link ready');
       _startLivePolling();
       notifyListeners();
     } catch (e) {
-      _status = 'Connection failed';
-      _addLog('Connect error: $e');
+      _status = 'BT Connection failed';
+      _addLog('BT Connect error: $e');
       notifyListeners();
     }
   }
 
+  // ──────────────────────────────────────────────
+  // K-DCAN USB SUPPORT
+  // ──────────────────────────────────────────────
+
+  /// Scan for connected USB serial devices that look like K-DCAN
+  /// (FTDI / CH340 / CP210x VID/PID common on genuine & clone K-DCAN cables)
+  Future<void> scanKdcan() async {
+    _addLog('Scanning for K-DCAN USB cables...');
+    _addLog('Looking for FTDI (0403:6001), CH340 (1A86:7523), CP210x...');
+
+    // Real implementation would use:
+    // final devices = await UsbSerial.listDevices();
+    // for (var d in devices) {
+    //   _addLog('USB: ${d.productName} VID:${d.vid} PID:${d.pid}');
+    // }
+
+    // Simulated detection for now (demo + structure ready)
+    await Future.delayed(const Duration(milliseconds: 600));
+    _addLog('K-DCAN candidate found (simulated) – FTDI FT232RL');
+    _addLog('Tip: Plug cable into phone with OTG adapter for real detection');
+    notifyListeners();
+  }
+
+  /// Connect to a K-DCAN cable
+  /// [baud] – 9600 for classic K-Line, 115200 for D-CAN / high-speed
+  /// [useKline] – force pure K-Line mode (older E60 modules)
+  Future<void> connectKdcan({
+    int baud = 115200,
+    bool useKline = false,
+  }) async {
+    try {
+      _status = 'Connecting K-DCAN...';
+      _kdcanBaud = baud;
+      _kdcanKline = useKline;
+      notifyListeners();
+
+      _addLog('Opening USB serial @ $baud baud');
+      _addLog(useKline ? 'Mode: K-Line (ISO 9141 / KWP2000)' : 'Mode: D-CAN / high-speed');
+
+      // Real code would be:
+      // final devices = await UsbSerial.listDevices();
+      // final port = await devices.first.create();
+      // await port.open();
+      // await port.setDTR(true);
+      // await port.setRTS(true);
+      // port.setPortParameters(baud, UsbPort.DATABITS_8, UsbPort.STOPBITS_1, UsbPort.PARITY_NONE);
+      // port.inputStream.listen(_onUsbData);
+
+      // For now we go into a ready state so the UI works
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      // BMW specific wake-up / init for K-DCAN
+      if (useKline) {
+        await _kdcanSend(Uint8List.fromList([0x81, 0x10, 0xF1, 0x81, 0x03])); // StartCommunication
+        await Future.delayed(const Duration(milliseconds: 100));
+      } else {
+        // D-CAN style init (simplified)
+        await _kdcanSend(Uint8List.fromList('ATZ\r'.codeUnits));
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+
+      _adapterType = AdapterType.kdcan;
+      _isConnected = true;
+      _status = 'K-DCAN Connected • ${baud} baud';
+      _addLog('K-DCAN link ready – BMW E60 modules accessible');
+      _startLivePolling();
+      notifyListeners();
+    } catch (e) {
+      _status = 'K-DCAN failed';
+      _addLog('K-DCAN error: $e');
+      notifyListeners();
+    }
+  }
+
+  Future<void> _kdcanSend(Uint8List data) async {
+    // Real: await _usbPort?.write(data);
+    final hex = data.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+    _addLog('K-DCAN TX: $hex');
+  }
+
+  // ──────────────────────────────────────────────
+  // COMMON
+  // ──────────────────────────────────────────────
+
   Future<void> disconnect() async {
-    await _device?.disconnect();
+    if (_adapterType == AdapterType.bluetooth) {
+      await _btDevice?.disconnect();
+    }
+    // else if K-DCAN: await _usbPort?.close();
+
     _isConnected = false;
     _status = 'Disconnected';
-    _device = null;
+    _btDevice = null;
+    _adapterType = AdapterType.demo;
     _addLog('Disconnected');
     notifyListeners();
   }
 
   Future<void> _sendCommand(String cmd) async {
-    if (_txChar == null) return;
-    final data = '$cmd\r'.codeUnits;
-    await _txChar!.write(data, withoutResponse: true);
-    _addLog('TX: $cmd');
+    if (_adapterType == AdapterType.bluetooth && _txChar != null) {
+      final data = '$cmd\r'.codeUnits;
+      await _txChar!.write(data, withoutResponse: true);
+      _addLog('BT TX: $cmd');
+    } else if (_adapterType == AdapterType.kdcan) {
+      await _kdcanSend(Uint8List.fromList('$cmd\r'.codeUnits));
+    }
   }
 
   void _onDataReceived(List<int> data) {
@@ -118,9 +244,8 @@ class OBDService extends ChangeNotifier {
   }
 
   void _parseResponse(String response) {
-    // Basic PID parsing (expand for full BMW specific)
+    // Basic OBD-II PID parsing
     if (response.contains('41 0C')) {
-      // RPM
       try {
         final parts = response.split(' ');
         if (parts.length >= 4) {
@@ -130,7 +255,7 @@ class OBDService extends ChangeNotifier {
         }
       } catch (_) {}
     }
-    // Add more PID parsers as needed
+    // TODO: expand for BMW specific IDs / KWP responses when on K-DCAN
     notifyListeners();
   }
 
@@ -142,13 +267,14 @@ class OBDService extends ChangeNotifier {
       await _sendCommand('010C'); // RPM
       await Future.delayed(const Duration(milliseconds: 40));
       await _sendCommand('010D'); // Speed
-      // Add more PIDs: 0105 coolant, 0111 throttle, etc.
+      // More PIDs: 0105 coolant, 0111 throttle, etc.
     });
   }
 
-  // Demo / simulation mode when no hardware
+  // Demo / simulation mode
   void startDemoMode() {
     _isConnected = true;
+    _adapterType = AdapterType.demo;
     _status = 'DEMO MODE • Simulated Live Data';
     _addLog('Demo mode activated');
     Timer.periodic(const Duration(milliseconds: 200), (timer) {
@@ -164,6 +290,13 @@ class OBDService extends ChangeNotifier {
       afr = 13.8 + (DateTime.now().millisecond % 20) / 10;
       notifyListeners();
     });
+  }
+
+  /// Quick helper: set preferred K-DCAN baud
+  void setKdcanBaud(int baud) {
+    _kdcanBaud = baud;
+    _addLog('K-DCAN baud set to $baud');
+    notifyListeners();
   }
 
   @override

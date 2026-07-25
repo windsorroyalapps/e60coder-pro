@@ -15,6 +15,9 @@
     <!-- Internet (optional AI backend later) -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- USB Host for K-DCAN cables -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
+
     <application
         android:label="E60Coder Pro"
         android:name="${applicationName}"
