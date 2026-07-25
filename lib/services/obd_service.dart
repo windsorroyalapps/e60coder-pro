@@ -213,17 +213,52 @@ class OBDService extends ChangeNotifier {
   // ──────────────────────────────────────────────
 
   Future<void> disconnect() async {
-    if (_adapterType == AdapterType.bluetooth) {
-      await _btDevice?.disconnect();
-    }
-    // else if K-DCAN: await _usbPort?.close();
-
-    _isConnected = false;
-    _status = 'Disconnected';
-    _btDevice = null;
-    _adapterType = AdapterType.demo;
-    _addLog('Disconnected');
+    _status = 'Disconnecting...';
     notifyListeners();
+
+    // Always stop live polling first
+    _pollTimer?.cancel();
+    _pollTimer = null;
+
+    try {
+      if (_adapterType == AdapterType.bluetooth) {
+        // Stop notifications cleanly before disconnect
+        try {
+          if (_rxChar != null) {
+            await _rxChar!.setNotifyValue(false);
+          }
+        } catch (e) {
+          _addLog('Warn: could not stop BT notifications – $e');
+        }
+
+        try {
+          await _btDevice?.disconnect();
+          _addLog('Bluetooth adapter disconnected');
+        } catch (e) {
+          _addLog('BT disconnect error (forced cleanup): $e');
+          // Force local cleanup even if remote disconnect fails
+        }
+      } else if (_adapterType == AdapterType.kdcan) {
+        try {
+          // Real: await _usbPort?.close();
+          _addLog('K-DCAN USB port closed');
+        } catch (e) {
+          _addLog('K-DCAN close error (forced cleanup): $e');
+        }
+      }
+    } catch (e) {
+      _addLog('Disconnect unexpected error: $e');
+    } finally {
+      // Always reset local state so UI recovers
+      _isConnected = false;
+      _status = 'Disconnected';
+      _btDevice = null;
+      _txChar = null;
+      _rxChar = null;
+      _adapterType = AdapterType.demo;
+      _addLog('Session ended – ready for next connection');
+      notifyListeners();
+    }
   }
 
   Future<void> _sendCommand(String cmd) async {
