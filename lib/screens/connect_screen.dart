@@ -31,6 +31,22 @@ class _ConnectScreenState extends State<ConnectScreen>
     super.dispose();
   }
 
+  Color _statusColor(OBDService obd) {
+    switch (obd.blePhase) {
+      case BleConnectionPhase.connected:
+        return Colors.greenAccent;
+      case BleConnectionPhase.connecting:
+      case BleConnectionPhase.scanning:
+        return Colors.amber;
+      case BleConnectionPhase.lost:
+        return Colors.orange;
+      case BleConnectionPhase.disconnecting:
+        return Colors.deepOrange;
+      default:
+        return obd.isConnected ? Colors.greenAccent : Colors.redAccent;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final obd = context.watch<OBDService>();
@@ -63,7 +79,7 @@ class _ConnectScreenState extends State<ConnectScreen>
       ),
       body: Column(
         children: [
-          // Status bar
+          // Status bar with BLE phase + reconnect
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -78,7 +94,7 @@ class _ConnectScreenState extends State<ConnectScreen>
                       height: 10,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: obd.isConnected ? Colors.greenAccent : Colors.redAccent,
+                        color: _statusColor(obd),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -92,16 +108,16 @@ class _ConnectScreenState extends State<ConnectScreen>
                       ),
                     ),
                     Text(
-                      obd.adapterType.name.toUpperCase(),
+                      '${obd.adapterType.name.toUpperCase()} • ${obd.blePhase.name}',
                       style: TextStyle(
                         color: Colors.grey[500],
-                        fontSize: 11,
-                        letterSpacing: 1,
+                        fontSize: 10,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
-                if (obd.isConnected && obd.device != null)
+                if (obd.device != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
@@ -109,11 +125,26 @@ class _ConnectScreenState extends State<ConnectScreen>
                       style: TextStyle(color: Colors.grey[400], fontSize: 12),
                     ),
                   ),
+                if (obd.blePhase == BleConnectionPhase.lost)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => obd.reconnectBluetooth(),
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('RECONNECT'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange,
+                          side: const BorderSide(color: Colors.orange),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
 
-          // Tabs content
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -124,7 +155,6 @@ class _ConnectScreenState extends State<ConnectScreen>
             ),
           ),
 
-          // Disconnect button with error handling
           if (obd.isConnected)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -163,7 +193,6 @@ class _ConnectScreenState extends State<ConnectScreen>
               ),
             ),
 
-          // Live log console
           Container(
             height: 150,
             color: Colors.black,
@@ -209,15 +238,9 @@ class _ConnectScreenState extends State<ConnectScreen>
               children: [
                 Icon(Icons.bluetooth_searching, size: 48, color: Colors.grey[700]),
                 const SizedBox(height: 12),
-                Text(
-                  'No Bluetooth adapters found',
-                  style: TextStyle(color: Colors.grey[500]),
-                ),
+                Text('No Bluetooth adapters found', style: TextStyle(color: Colors.grey[500])),
                 const SizedBox(height: 4),
-                Text(
-                  'ELM327 / OBDLink / Vgate / Carista',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
+                Text('ELM327 / OBDLink / Vgate / Carista', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () => obd.startScan(),
@@ -235,11 +258,7 @@ class _ConnectScreenState extends State<ConnectScreen>
             final r = filtered[i];
             return ListTile(
               leading: const Icon(Icons.bluetooth, color: Colors.cyan),
-              title: Text(
-                r.device.platformName.isEmpty
-                    ? 'Unknown Device'
-                    : r.device.platformName,
-              ),
+              title: Text(r.device.platformName.isEmpty ? 'Unknown Device' : r.device.platformName),
               subtitle: Text(r.device.remoteId.str, style: const TextStyle(fontSize: 11)),
               trailing: ElevatedButton(
                 onPressed: () => obd.connectBluetooth(r.device),
@@ -276,20 +295,12 @@ class _ConnectScreenState extends State<ConnectScreen>
                   children: [
                     Icon(Icons.usb, color: Colors.orange, size: 20),
                     SizedBox(width: 8),
-                    Text(
-                      'K-DCAN USB Cable',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+                    Text('K-DCAN USB Cable', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'FTDI FT232RL / CH340 / CP210x based cables\n'
-                  'Use OTG adapter on Android. Supports INPA / ISTA style access.',
+                  'FTDI FT232RL / CH340 / CP210x based cables\nUse OTG adapter on Android. Supports INPA / ISTA style access.',
                   style: TextStyle(color: Colors.grey[400], fontSize: 12, height: 1.4),
                 ),
               ],
@@ -306,10 +317,7 @@ class _ConnectScreenState extends State<ConnectScreen>
                 label: Text('$baud'),
                 selected: selected,
                 selectedColor: const Color(0xFF00E5FF).withOpacity(0.3),
-                labelStyle: TextStyle(
-                  color: selected ? const Color(0xFF00E5FF) : Colors.grey,
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                ),
+                labelStyle: TextStyle(color: selected ? const Color(0xFF00E5FF) : Colors.grey, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
                 onSelected: (_) => setState(() => _selectedBaud = baud),
               );
             }).toList(),
@@ -318,12 +326,7 @@ class _ConnectScreenState extends State<ConnectScreen>
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('K-Line Mode', style: TextStyle(fontSize: 14)),
-            subtitle: Text(
-              _useKline
-                  ? 'ISO 9141 / KWP2000 (older modules)'
-                  : 'D-CAN / high-speed (recommended)',
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
-            ),
+            subtitle: Text(_useKline ? 'ISO 9141 / KWP2000 (older modules)' : 'D-CAN / high-speed (recommended)', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
             value: _useKline,
             activeColor: const Color(0xFF00E5FF),
             onChanged: (v) => setState(() => _useKline = v),
@@ -333,37 +336,20 @@ class _ConnectScreenState extends State<ConnectScreen>
             onPressed: () => obd.scanKdcan(),
             icon: const Icon(Icons.search),
             label: const Text('SCAN FOR K-DCAN'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey[900],
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[900], foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 48)),
           ),
           const SizedBox(height: 10),
           ElevatedButton.icon(
-            onPressed: () => obd.connectKdcan(
-              baud: _selectedBaud,
-              useKline: _useKline,
-            ),
+            onPressed: () => obd.connectKdcan(baud: _selectedBaud, useKline: _useKline),
             icon: const Icon(Icons.link),
             label: Text('CONNECT  •  $_selectedBaud baud'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.withOpacity(0.25),
-              foregroundColor: Colors.orange,
-              minimumSize: const Size(double.infinity, 52),
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.withOpacity(0.25), foregroundColor: Colors.orange, minimumSize: const Size(double.infinity, 52)),
           ),
           const SizedBox(height: 24),
-          Text(
-            'TIPS',
-            style: TextStyle(color: Colors.grey[600], fontSize: 11, letterSpacing: 1),
-          ),
+          Text('TIPS', style: TextStyle(color: Colors.grey[600], fontSize: 11, letterSpacing: 1)),
           const SizedBox(height: 6),
           Text(
-            '• 9600 = classic K-Line (many E60 modules)\n'
-            '• 115200 = D-CAN / faster modern modules\n'
-            '• Use a quality FTDI-based cable for best results\n'
-            '• OTG adapter required on most phones',
+            '• 9600 = classic K-Line (many E60 modules)\n• 115200 = D-CAN / faster modern modules\n• Use a quality FTDI-based cable for best results\n• OTG adapter required on most phones',
             style: TextStyle(color: Colors.grey[500], fontSize: 12, height: 1.5),
           ),
         ],
