@@ -3,10 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-/// Connection type for the adapter
 enum AdapterType { bluetooth, kdcan, demo }
 
-/// Fine-grained BLE connection phase
 enum BleConnectionPhase {
   idle,
   scanning,
@@ -14,30 +12,15 @@ enum BleConnectionPhase {
   connected,
   disconnecting,
   disconnected,
-  lost, // unexpected drop (range, power, etc.)
+  lost,
 }
 
-/// E60Coder Pro OBD Service
-/// Supports:
-///   - Bluetooth ELM327 / OBDLink / Vgate style adapters
-///   - USB K-DCAN cables (FTDI FT232RL / CH340 / CP210x based)
-///   - Demo / simulation mode
-///
-/// BLE monitoring:
-///   - device.connectionState stream
-///   - FlutterBluePlus.adapterState (phone BT on/off)
-///   - Automatic cleanup on unexpected disconnect
 class OBDService extends ChangeNotifier {
-  // Bluetooth
   BluetoothDevice? _btDevice;
   BluetoothCharacteristic? _txChar;
   BluetoothCharacteristic? _rxChar;
   StreamSubscription<BluetoothConnectionState>? _connSub;
   StreamSubscription<BluetoothAdapterState>? _adapterSub;
-
-  // K-DCAN / USB serial (placeholder for usb_serial integration)
-  // When using real USB: import 'package:usb_serial/usb_serial.dart';
-  // UsbPort? _usbPort;
 
   bool _isConnected = false;
   String _status = 'Disconnected';
@@ -45,7 +28,6 @@ class OBDService extends ChangeNotifier {
   BleConnectionPhase _blePhase = BleConnectionPhase.idle;
   final List<String> _logs = [];
 
-  // Live data
   int rpm = 0;
   double boost = 0.0;
   double speed = 0.0;
@@ -53,9 +35,11 @@ class OBDService extends ChangeNotifier {
   double throttle = 0.0;
   double afr = 14.7;
 
-  // K-DCAN specific state
   int _kdcanBaud = 115200;
   bool _kdcanKline = false;
+
+  List<ScanResult> _scanResults = [];
+  StreamSubscription<List<ScanResult>>? _scanSub;
 
   bool get isConnected => _isConnected;
   String get status => _status;
@@ -64,9 +48,49 @@ class OBDService extends ChangeNotifier {
   AdapterType get adapterType => _adapterType;
   int get kdcanBaud => _kdcanBaud;
   BleConnectionPhase get blePhase => _blePhase;
+  List<ScanResult> get scanResults => List.unmodifiable(_scanResults);
 
   OBDService() {
     _startAdapterMonitoring();
+  }
+
+  /// Human-readable summary of advertising payload
+  static String formatAdvData(ScanResult r) {
+    final adv = r.advertisementData;
+    final parts = <String>[];
+
+    if (adv.advName.isNotEmpty) {
+      parts.add('Name: ${adv.advName}');
+    }
+    parts.add('RSSI: ${r.rssi} dBm');
+    if (adv.txPowerLevel != null) {
+      parts.add('TX: ${adv.txPowerLevel} dBm');
+    }
+    parts.add(adv.connectable ? 'Connectable' : 'Non-connectable');
+
+    if (adv.manufacturerData.isNotEmpty) {
+      final mfg = adv.manufacturerData.entries.map((e) {
+        final id = e.key.toRadixString(16).padLeft(4, '0');
+        final hex = e.value.map((b) => b.toRadixString(16).padLeft(2, '0')).join('');
+        return 'MFG 0x$id:$hex';
+      }).join(' | ');
+      parts.add(mfg);
+    }
+
+    if (adv.serviceUuids.isNotEmpty) {
+      final uuids = adv.serviceUuids.map((u) => u.str128).join(', ');
+      parts.add('Services: $uuids');
+    }
+
+    if (adv.serviceData.isNotEmpty) {
+      final sd = adv.serviceData.entries.map((e) {
+        final hex = e.value.map((b) => b.toRadixString(16).padLeft(2, '0')).join('');
+        return '${e.key.str128}:$hex';
+      }).join(' | ');
+      parts.add('SvcData: $sd');
+    }
+
+    return parts.join('  •  ');
   }
 
   void _addLog(String msg) {
@@ -76,11 +100,6 @@ class OBDService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ──────────────────────────────────────────────
-  // BLE ADAPTER + CONNECTION STATE MONITORING
-  // ──────────────────────────────────────────────
-
-  /// Watch phone Bluetooth radio (on / off / turning on / etc.)
   void _startAdapterMonitoring() {
     _adapterSub?.cancel();
     _adapterSub = FlutterBluePlus.adapterState.listen((state) {
@@ -116,7 +135,6 @@ class OBDService extends ChangeNotifier {
     });
   }
 
-  /// Attach a listener to a specific device’s connection state
   void _monitorDeviceConnection(BluetoothDevice device) {
     _connSub?.cancel();
     _connSub = device.connectionState.listen((state) {
@@ -125,7 +143,6 @@ class OBDService extends ChangeNotifier {
           _blePhase = BleConnectionPhase.connected;
           _addLog('BLE state → CONNECTED');
           break;
-
         case BluetoothConnectionState.disconnected:
           _addLog('BLE state → DISCONNECTED');
           if (_isConnected && _adapterType == AdapterType.bluetooth) {
@@ -135,7 +152,6 @@ class OBDService extends ChangeNotifier {
             notifyListeners();
           }
           break;
-
         default:
           _addLog('BLE state → $state');
       }
@@ -145,7 +161,6 @@ class OBDService extends ChangeNotifier {
     });
   }
 
-  /// Called when the link drops without an explicit disconnect() call
   void _handleUnexpectedDisconnect(String reason) {
     _addLog('⚠ Unexpected disconnect: $reason');
     _blePhase = BleConnectionPhase.lost;
@@ -155,14 +170,9 @@ class OBDService extends ChangeNotifier {
     _isConnected = false;
     _txChar = null;
     _rxChar = null;
-    // Keep _btDevice so user can try reconnect
     _adapterType = AdapterType.bluetooth;
     notifyListeners();
   }
-
-  // ──────────────────────────────────────────────
-  // BLUETOOTH SCAN / CONNECT
-  // ──────────────────────────────────────────────
 
   Future<void> startScan() async {
     _blePhase = BleConnectionPhase.scanning;
@@ -178,16 +188,29 @@ class OBDService extends ChangeNotifier {
         } catch (_) {}
       }
 
+      _scanResults = [];
+      _scanSub?.cancel();
+
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
-      FlutterBluePlus.scanResults.listen((results) {
+
+      _scanSub = FlutterBluePlus.scanResults.listen((results) {
+        _scanResults = List.from(results);
+        notifyListeners();
+
         for (ScanResult r in results) {
           final name = r.device.platformName;
-          if (name.toLowerCase().contains('obd') ||
+          final advName = r.advertisementData.advName;
+          final isObdLike = name.toLowerCase().contains('obd') ||
               name.toLowerCase().contains('elm') ||
               name.toLowerCase().contains('vgate') ||
               name.toLowerCase().contains('carista') ||
-              name.toLowerCase().contains('obdlink')) {
-            _addLog('Found BT: $name (${r.device.remoteId})');
+              name.toLowerCase().contains('obdlink') ||
+              advName.toLowerCase().contains('obd') ||
+              advName.toLowerCase().contains('elm');
+
+          if (isObdLike || results.length <= 8) {
+            _addLog('ADV ${r.device.remoteId.str}');
+            _addLog('  ${formatAdvData(r)}');
           }
         }
       });
@@ -207,10 +230,7 @@ class OBDService extends ChangeNotifier {
 
       _monitorDeviceConnection(device);
 
-      await device.connect(
-        timeout: const Duration(seconds: 12),
-        autoConnect: false,
-      );
+      await device.connect(timeout: const Duration(seconds: 12), autoConnect: false);
 
       _btDevice = device;
       _adapterType = AdapterType.bluetooth;
@@ -262,7 +282,6 @@ class OBDService extends ChangeNotifier {
     }
   }
 
-  /// Try to re-connect to the last known Bluetooth device
   Future<void> reconnectBluetooth() async {
     if (_btDevice == null) {
       _addLog('No previous BT device to reconnect');
@@ -272,35 +291,24 @@ class OBDService extends ChangeNotifier {
     await connectBluetooth(_btDevice!);
   }
 
-  // ──────────────────────────────────────────────
-  // K-DCAN USB SUPPORT
-  // ──────────────────────────────────────────────
-
   Future<void> scanKdcan() async {
     _addLog('Scanning for K-DCAN USB cables…');
     _addLog('Looking for FTDI (0403:6001), CH340 (1A86:7523), CP210x…');
-
     await Future.delayed(const Duration(milliseconds: 600));
     _addLog('K-DCAN candidate found (simulated) – FTDI FT232RL');
     _addLog('Tip: Plug cable into phone with OTG adapter for real detection');
     notifyListeners();
   }
 
-  Future<void> connectKdcan({
-    int baud = 115200,
-    bool useKline = false,
-  }) async {
+  Future<void> connectKdcan({int baud = 115200, bool useKline = false}) async {
     try {
       _status = 'Connecting K-DCAN…';
       _kdcanBaud = baud;
       _kdcanKline = useKline;
       notifyListeners();
-
       _addLog('Opening USB serial @ $baud baud');
       _addLog(useKline ? 'Mode: K-Line (ISO 9141 / KWP2000)' : 'Mode: D-CAN / high-speed');
-
       await Future.delayed(const Duration(milliseconds: 800));
-
       if (useKline) {
         await _kdcanSend(Uint8List.fromList([0x81, 0x10, 0xF1, 0x81, 0x03]));
         await Future.delayed(const Duration(milliseconds: 100));
@@ -308,7 +316,6 @@ class OBDService extends ChangeNotifier {
         await _kdcanSend(Uint8List.fromList('ATZ\r'.codeUnits));
         await Future.delayed(const Duration(milliseconds: 300));
       }
-
       _adapterType = AdapterType.kdcan;
       _isConnected = true;
       _status = 'K-DCAN Connected • $baud baud';
@@ -327,28 +334,19 @@ class OBDService extends ChangeNotifier {
     _addLog('K-DCAN TX: $hex');
   }
 
-  // ──────────────────────────────────────────────
-  // COMMON
-  // ──────────────────────────────────────────────
-
   Future<void> disconnect() async {
     _blePhase = BleConnectionPhase.disconnecting;
     _status = 'Disconnecting…';
     notifyListeners();
-
     _pollTimer?.cancel();
     _pollTimer = null;
-
     try {
       if (_adapterType == AdapterType.bluetooth) {
         try {
-          if (_rxChar != null) {
-            await _rxChar!.setNotifyValue(false);
-          }
+          if (_rxChar != null) await _rxChar!.setNotifyValue(false);
         } catch (e) {
           _addLog('Warn: could not stop BT notifications – $e');
         }
-
         try {
           await _btDevice?.disconnect();
           _addLog('Bluetooth adapter disconnected');
@@ -387,9 +385,7 @@ class OBDService extends ChangeNotifier {
         _addLog('BT TX: $cmd');
       } catch (e) {
         _addLog('BT TX error: $e');
-        if (_isConnected) {
-          _handleUnexpectedDisconnect('Write failed – link dead?');
-        }
+        if (_isConnected) _handleUnexpectedDisconnect('Write failed – link dead?');
       }
     } else if (_adapterType == AdapterType.kdcan) {
       await _kdcanSend(Uint8List.fromList('$cmd\r'.codeUnits));
@@ -460,6 +456,7 @@ class OBDService extends ChangeNotifier {
     _pollTimer?.cancel();
     _connSub?.cancel();
     _adapterSub?.cancel();
+    _scanSub?.cancel();
     super.dispose();
   }
 }
