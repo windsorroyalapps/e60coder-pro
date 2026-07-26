@@ -8,6 +8,9 @@ import 'code_screen.dart';
 import 'comms_screen.dart';
 import 'device_control_screen.dart';
 import 'bt_tether_screen.dart';
+import 'recorder_screen.dart';
+import 'can_bus_screen.dart';
+import 'aftermarket_hu_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -15,7 +18,6 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final obd = context.watch<OBDService>();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('E60Coder Pro', style: TextStyle(letterSpacing: 2)),
@@ -41,26 +43,31 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 8),
             Text('BMW E60 / N54-N55', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: const Color(0xFF00E5FF), fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             const SizedBox(height: 4),
             Text('Advanced OBD • Coding • AI Tuning', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Expanded(
               child: ListView(children: [
                 _MenuButton(icon: Icons.bluetooth_searching, label: 'CONNECT / OBD', color: const Color(0xFF00E5FF), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectScreen()))),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _MenuButton(icon: Icons.speed, label: 'LIVE GAUGES', color: const Color(0xFFFF6D00), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GaugesScreen()))),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _MenuButton(icon: Icons.tune, label: 'AI TUNING', color: const Color(0xFF7C4DFF), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TuneScreen()))),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _MenuButton(icon: Icons.code, label: 'CODING / NCS', color: const Color(0xFF00E676), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CodeScreen()))),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _MenuButton(icon: Icons.device_hub, label: 'DEVICE CONNECTIONS', color: const Color(0xFFFFEA00), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommsScreen()))),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _MenuButton(icon: Icons.headphones, label: 'DEVICE CONTROL', color: const Color(0xFFE040FB), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceControlScreen()))),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _MenuButton(icon: Icons.wifi_tethering, label: 'BT INTERNET / TETHER', color: const Color(0xFF18FFFF), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BtTetherScreen()))),
+                const SizedBox(height: 10),
+                _MenuButton(icon: Icons.radio_button_checked, label: 'CHANNEL RECORDER', color: const Color(0xFFFF5252), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecorderScreen()))),
+                const SizedBox(height: 10),
+                _MenuButton(icon: Icons.cable, label: 'CAN / OBD GATEWAY', color: const Color(0xFF69F0AE), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CanBusScreen()))),
+                const SizedBox(height: 10),
+                _MenuButton(icon: Icons.speaker_group, label: 'AFTERMARKET HU / CAN', color: const Color(0xFFB2FF59), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AftermarketHuScreen()))),
                 const SizedBox(height: 16),
                 if (!obd.isConnected)
                   ElevatedButton.icon(onPressed: () => obd.startDemoMode(), icon: const Icon(Icons.play_arrow), label: const Text('START DEMO MODE'), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[900], foregroundColor: Colors.white70, padding: const EdgeInsets.symmetric(vertical: 14))),
@@ -90,16 +97,16 @@ class _MenuButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: color.withOpacity(0.5), width: 1.5),
             gradient: LinearGradient(colors: [color.withOpacity(0.15), Colors.transparent], begin: Alignment.centerLeft, end: Alignment.centerRight),
           ),
           child: Row(children: [
-            Icon(icon, color: color, size: 26),
-            const SizedBox(width: 14),
-            Expanded(child: Text(label, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 1))),
+            Icon(icon, color: color, size: 24),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.8))),
             Icon(Icons.chevron_right, color: color.withOpacity(0.7)),
           ]),
         ),
