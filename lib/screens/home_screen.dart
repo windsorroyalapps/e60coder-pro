@@ -7,6 +7,7 @@ import 'tune_screen.dart';
 import 'code_screen.dart';
 import 'comms_screen.dart';
 import 'device_control_screen.dart';
+import 'bt_tether_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -14,6 +15,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final obd = context.watch<OBDService>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('E60Coder Pro', style: TextStyle(letterSpacing: 2)),
@@ -39,11 +41,11 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text('BMW E60 / N54-N55', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: const Color(0xFF00E5FF), fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             const SizedBox(height: 4),
             Text('Advanced OBD • Coding • AI Tuning', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey), textAlign: TextAlign.center),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Expanded(
               child: ListView(children: [
                 _MenuButton(icon: Icons.bluetooth_searching, label: 'CONNECT / OBD', color: const Color(0xFF00E5FF), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectScreen()))),
@@ -57,7 +59,9 @@ class HomeScreen extends StatelessWidget {
                 _MenuButton(icon: Icons.device_hub, label: 'DEVICE CONNECTIONS', color: const Color(0xFFFFEA00), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommsScreen()))),
                 const SizedBox(height: 12),
                 _MenuButton(icon: Icons.headphones, label: 'DEVICE CONTROL', color: const Color(0xFFE040FB), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceControlScreen()))),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                _MenuButton(icon: Icons.wifi_tethering, label: 'BT INTERNET / TETHER', color: const Color(0xFF18FFFF), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BtTetherScreen()))),
+                const SizedBox(height: 16),
                 if (!obd.isConnected)
                   ElevatedButton.icon(onPressed: () => obd.startDemoMode(), icon: const Icon(Icons.play_arrow), label: const Text('START DEMO MODE'), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[900], foregroundColor: Colors.white70, padding: const EdgeInsets.symmetric(vertical: 14))),
                 const SizedBox(height: 12),
@@ -86,7 +90,7 @@ class _MenuButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: color.withOpacity(0.5), width: 1.5),
@@ -94,9 +98,8 @@ class _MenuButton extends StatelessWidget {
           ),
           child: Row(children: [
             Icon(icon, color: color, size: 26),
-            const SizedBox(width: 16),
-            Text(label, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 1.1)),
-            const Spacer(),
+            const SizedBox(width: 14),
+            Expanded(child: Text(label, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 1))),
             Icon(Icons.chevron_right, color: color.withOpacity(0.7)),
           ]),
         ),
