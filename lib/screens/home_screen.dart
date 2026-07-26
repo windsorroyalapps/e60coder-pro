@@ -5,6 +5,7 @@ import 'connect_screen.dart';
 import 'gauges_screen.dart';
 import 'tune_screen.dart';
 import 'code_screen.dart';
+import 'comms_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -25,16 +26,11 @@ class HomeScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: obd.isConnected ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: obd.isConnected ? Colors.green : Colors.red,
-                  ),
+                  border: Border.all(color: obd.isConnected ? Colors.green : Colors.red),
                 ),
                 child: Text(
                   obd.status,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: obd.isConnected ? Colors.greenAccent : Colors.redAccent,
-                  ),
+                  style: TextStyle(fontSize: 11, color: obd.isConnected ? Colors.greenAccent : Colors.redAccent),
                 ),
               ),
             ),
@@ -49,10 +45,7 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'BMW E60 / N54-N55',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: const Color(0xFF00E5FF),
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: const Color(0xFF00E5FF), fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
@@ -66,40 +59,35 @@ class HomeScreen extends StatelessWidget {
               icon: Icons.bluetooth_searching,
               label: 'CONNECT / OBD',
               color: const Color(0xFF00E5FF),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ConnectScreen()),
-              ),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectScreen())),
             ),
             const SizedBox(height: 14),
             _MenuButton(
               icon: Icons.speed,
               label: 'LIVE GAUGES',
               color: const Color(0xFFFF6D00),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const GaugesScreen()),
-              ),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GaugesScreen())),
             ),
             const SizedBox(height: 14),
             _MenuButton(
               icon: Icons.tune,
               label: 'AI TUNING',
               color: const Color(0xFF7C4DFF),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TuneScreen()),
-              ),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TuneScreen())),
             ),
             const SizedBox(height: 14),
             _MenuButton(
               icon: Icons.code,
               label: 'CODING / NCS',
               color: const Color(0xFF00E676),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CodeScreen()),
-              ),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CodeScreen())),
+            ),
+            const SizedBox(height: 14),
+            _MenuButton(
+              icon: Icons.device_hub,
+              label: 'DEVICE CONNECTIONS',
+              color: const Color(0xFFFFEA00),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommsScreen())),
             ),
             const Spacer(),
             if (!obd.isConnected)
@@ -107,11 +95,7 @@ class HomeScreen extends StatelessWidget {
                 onPressed: () => obd.startDemoMode(),
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('START DEMO MODE'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[900],
-                  foregroundColor: Colors.white70,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[900], foregroundColor: Colors.white70, padding: const EdgeInsets.symmetric(vertical: 14)),
               ),
             const SizedBox(height: 12),
             Text(
@@ -132,12 +116,7 @@ class _MenuButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _MenuButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
+  const _MenuButton({required this.icon, required this.label, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -151,25 +130,13 @@ class _MenuButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: color.withOpacity(0.5), width: 1.5),
-            gradient: LinearGradient(
-              colors: [color.withOpacity(0.15), Colors.transparent],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
+            gradient: LinearGradient(colors: [color.withOpacity(0.15), Colors.transparent], begin: Alignment.centerLeft, end: Alignment.centerRight),
           ),
           child: Row(
             children: [
               Icon(icon, color: color, size: 28),
               const SizedBox(width: 16),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                ),
-              ),
+              Text(label, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
               const Spacer(),
               Icon(Icons.chevron_right, color: color.withOpacity(0.7)),
             ],
